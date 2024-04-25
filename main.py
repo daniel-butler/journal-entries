@@ -10,12 +10,56 @@ import uuid
 import pandas as pd
 
 from constants import INTERCOMPANY_GL_ASSET_ACCOUNT, EntryType, DocumentType, \
-    INTERCOMPANY_GL_LIABILITY_ACCOUNT, Department, Market, ENTITIES
+    INTERCOMPANY_GL_LIABILITY_ACCOUNT, Department, Market, ENTITIES, Entity
 from exceptions import JournalEntryInvalid
 
+SAVE_LOCATION = Path(__file__).parent  # Same folder as the script
 
-def main():
-    pass
+
+def main(
+        import_file: Path,
+        client_code: str,
+        deposit_entity: Entity,
+        posting_date: date,
+        document_date: date,
+        payment_number: str,
+        applies_to_type: str,
+        department: Department,
+        market: Market,
+        state: str,
+        division: str,
+        statement_identifier: str,
+        save_location: Path = SAVE_LOCATION,
+
+        # Only if versioning is required
+        import_input_version: str = 'V1',
+        import_output_version: str = 'V1',
+):
+    df = pd.read_excel(import_file)
+    df.columns = df.columns.str.lower()  # Ensure all columns are lowercase to reduce mistakes
+    lines = df.to_dict(orient='records')
+
+    import_je = ImportEntries(
+        lines=lines,
+        posting_date=posting_date,
+        statement_reference=statement_identifier,
+        deposit_id=payment_number,
+        deposit_document_type=applies_to_type,
+        deposit_entity=deposit_entity,
+        deposit_client_code=client_code,
+        import_version=import_input_version,
+        document_date=document_date,
+        deposit_department=department,
+        deposit_market=market,
+        deposit_state=state,
+        deposit_division=division,
+    )
+    import_je.create()
+    save_import_jes(
+        entries=import_je,
+        save_location=save_location,
+        version=import_output_version,
+    )
 
 
 @define
@@ -35,7 +79,7 @@ class JournalLine:
     state: str
     division: str
     business_unit_code: int
-    entry_entity: str
+    entry_entity: Entity
     salesperson_code: str | None = None
     client: str | None = None
     customer: str | None = None
@@ -66,9 +110,9 @@ class JournalEntry:
     @property
     def is_valid(self):
         return self.validate_lines_net_to_zero() \
-               and self.validate_document_types_match() \
-               and self.validate_lines_for_one_entity() \
-               and self.validate_posting_date()
+            and self.validate_document_types_match() \
+            and self.validate_lines_for_one_entity() \
+            and self.validate_posting_date()
 
     def validate_posting_date(self):
         if self.lines[0].posting_date is None:
@@ -79,7 +123,7 @@ class JournalEntry:
         else:
             raise JournalEntryInvalid(
                 f'Journal Lines Posting Dates do not match!\n'
-                f'Summary:\n{[(entry.account_number, entry.description,entry.posting_date) for entry in self.lines]}\n'
+                f'Summary:\n{[(entry.account_number, entry.description, entry.posting_date) for entry in self.lines]}\n'
                 f'Detail:\n{self.lines}')
 
     def validate_lines_net_to_zero(self):
@@ -144,12 +188,11 @@ class ImportEntries:
     required.
     """
     lines: list[dict]
-    statement_amount_per_user: Decimal
     posting_date: date
-    statement_reference: uuid.UUID
+    statement_reference: str
     deposit_id: str
     deposit_document_type: str
-    deposit_entity: str
+    deposit_entity: Entity
     deposit_client_code: str
     import_version: str
     document_date: date
@@ -167,25 +210,7 @@ class ImportEntries:
         self.entry_id = self.create_entry_id()
         self._entity_and_amount = dict()
 
-    def save_import_jes(self, save_location: Path) -> Path:
-        """
-        Using the list of entries from the entries attribute. A dataframe of the entries are created. Looking at each
-        entities set of entries they are saved off as a .txt file to the specified location.
-        """
-        df = self._to_dataframe()
-        statement_save_location = Path(save_location) / f'{self.statement_reference}'
-        statement_save_location.mkdir()
-        for entity in df['entry_entity'].unique():
-            destination = statement_save_location / f"{self.posting_date.strftime('%m.%d.%y')} " \
-                                                f"{self.document_date.strftime('%m.%y')} " \
-                                                f"CK {self.deposit_id} " \
-                                                f"${self.statement_amount_per_user} " \
-                                                f"IMPORT_V7_{entity}.txt"
-            df[df['entry_entity'] == entity].drop('entry_entity', axis=1) \
-                .to_csv(destination, sep='\t', index=False, header=False, date_format='%m%d%y', )
-        return statement_save_location
-
-    def _to_dataframe(self):
+    def to_dataframe(self):
         """Turns the entries into a DataFrame that matches the general journal import V7 specification"""
         lines = list()
         for entry in self.entries:
@@ -211,7 +236,7 @@ class ImportEntries:
                 self._statement_amount += Decimal(line['amount']).quantize(Decimal('1.00'))
         return Decimal(self._statement_amount)
 
-    def create_revenue_import_je(self) -> None:
+    def create(self) -> None:
         """
         Create the journal entry for each of the specified entries below. The entries are then saved to the entries
         attribute as a list of entries.
@@ -232,7 +257,7 @@ class ImportEntries:
                 entity_total_amount = entities_and_amount[entity].quantize(Decimal('1.00'))
                 self._intercompany_to_deposit_entity_je(entity=entity, entity_total_amount=entity_total_amount)
 
-    def _intercompany_to_deposit_entity_je(self, entity: str, entity_total_amount: Decimal) -> None:
+    def _intercompany_to_deposit_entity_je(self, entity: Entity, entity_total_amount: Decimal) -> None:
         """
         | Description | Debit | Credit |
         |-------------|-------|--------|
@@ -240,7 +265,7 @@ class ImportEntries:
 
         """
         description = f'Revenue entry in entities other than deposit entity intercompanying back to deposit entity: ' \
-                      f'{ENTITIES.get(self.deposit_entity).abbreviation}'
+                      f'{self.deposit_entity.abbreviation}'
         lines = [
             self._revenue_line(line=line, entry_entity=entity)
             for line in self.lines
@@ -336,7 +361,7 @@ class ImportEntries:
         if entry.is_valid:
             self.entries.append(entry)
 
-    def _revenue_line(self, line: dict, entry_entity: str) -> JournalLine:
+    def _revenue_line(self, line: dict, entry_entity: Entity) -> JournalLine:
         """Creates revenue lines"""
         description = line['description']
         if entry_entity != self.deposit_entity:
@@ -344,9 +369,9 @@ class ImportEntries:
 
         return JournalLine(
             account_type=EntryType.general_ledger,
-            account_number=line['account_number'],
-            posting_date=line['posting_date'],
-            document_date=line['document_date'],
+            account_number=line['account number'],
+            posting_date=line['posting date'],
+            document_date=line['document date'],
             document_no=self.entry_id,
             client=line['client'],
             debit=Decimal(line['amount']).quantize(Decimal('1.00')) * -1,
@@ -360,7 +385,7 @@ class ImportEntries:
             entry_entity=entry_entity
         )
 
-    def _intercompany_line_to_deposit_entity(self, entity: str, total_amount: Decimal) -> JournalLine:
+    def _intercompany_line_to_deposit_entity(self, entity: Entity, total_amount: Decimal) -> JournalLine:
         """Creates intercompany line to the deposit entity"""
         return JournalLine(
             account_type=EntryType.general_ledger,
@@ -370,14 +395,14 @@ class ImportEntries:
             document_no=self.entry_id,
             debit=total_amount,
             # Using the first lines description, line[0], is an imperfect workaround.
-            description=f"{ENTITIES.get(entity).abbreviation} - {self.lines[0]['description']}",
+            description=f"{entity.abbreviation} - {self.lines[0]['description']}",
             client=self.deposit_client_code,
             document_type=DocumentType.invoice,
             department=Department.corporate,
-            market=ENTITIES.get(self.deposit_entity).major_market,
-            state=ENTITIES.get(self.deposit_entity).major_state,
-            division=ENTITIES.get(self.deposit_entity).major_division,
-            business_unit_code=ENTITIES.get(self.deposit_entity).business_unit,
+            market=self.deposit_entity.major_market,
+            state=self.deposit_entity.major_state,
+            division=self.deposit_entity.major_division,
+            business_unit_code=self.deposit_entity.business_unit,
             entry_entity=entity,
         )
 
@@ -387,17 +412,36 @@ class ImportEntries:
     @property
     def entities_and_amount(self) -> dict:
         """
-        Looks through the lines to pick out the entities because each journal entry is done in one entity.
+        Looks through the lines to pick out the entities because each journal entry is done in an entity.
         """
         if not self._entity_and_amount:
             for line in self.lines:
-
-                self._entity_and_amount[line['entity']] = Decimal(
-                    self._entity_and_amount.get(line['entity'], 0) + Decimal(line['amount'])
-                ).quantize(Decimal('1.00'))
+                if entity := ENTITIES.get(line.get('entity')):
+                    self._entity_and_amount[entity] = Decimal(
+                        self._entity_and_amount.get(entity, 0) + Decimal(line['amount'])
+                    ).quantize(Decimal('1.00'))
 
         return self._entity_and_amount
 
 
-if __name__ == '__main__':
-    main()
+def save_import_jes(
+        entries: ImportEntries,
+        save_location: Path,
+        version: str,
+) -> Path:
+    """
+    Using the list of entries from the entries attribute. A dataframe of the entries are created. Looking at each
+    entities set of entries they are saved off as a .txt file to the specified location.
+    """
+    df = entries.to_dataframe()
+    statement_save_location = save_location / f'{entries.statement_reference}'
+    statement_save_location.mkdir()
+    for entity in df['entry_entity'].unique():
+        destination = statement_save_location / f"{entries.posting_date.strftime('%m.%d.%y')} " \
+                                                f"{entries.document_date.strftime('%m.%y')} " \
+                                                f"CK {entries.deposit_id} " \
+                                                f"IMPORT_{entries.import_version}_{entity}.txt"
+        df[df['entry_entity'] == entity].drop('entry_entity', axis=1) \
+            .to_csv(destination, sep='\t', index=False, header=False, date_format='%m%d%y', )
+    return statement_save_location
+

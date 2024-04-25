@@ -114,7 +114,7 @@ class Market(StrEnum):
     west_texas = 'WESTT'
 
 
-@define
+@define(hash=True, repr=True, slots=True, frozen=True)
 class Entity:
     business_unit: int
     name: str

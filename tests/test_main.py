@@ -1,22 +1,23 @@
 import zipfile
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 from constants import Market, Division, e16, Department
 from main import main
 
-test_directory = Path(__file__).parent / "data"
+test_data_directory = Path(__file__).parent / "data"
 
 
 def test_creating_import_happy_case(tmp_path):
     # GIVEN the expected test file
-    test_file = test_directory / 'Test Files' / '02.17.20 01.20 CK 191705 $56539.96 BRKDWN.xlsx'
+    test_file = test_data_directory / 'example-statement.xlsx'
 
     # GIVEN the expected inputs
     statement_amount = Decimal('5896.07')
     client_code = 'P005'
-    deposit_date = '2020-02-17'
-    document_date = '2020-01-31'
+    deposit_date = date(2024, 2, 17)
+    document_date = date(2024, 1, 31)
     deposit_payment_id = '191705'
     deposit_department = Department.retail
     deposit_market = Market.corporate
@@ -29,7 +30,19 @@ def test_creating_import_happy_case(tmp_path):
 
     # WHEN calling the function to generate the imports
     main(
-
+        import_file=test_file,
+        client_code=client_code,
+        deposit_entity=deposit_entity,
+        posting_date=deposit_date,
+        document_date=document_date,
+        payment_number='191705',
+        applies_to_type='Payment',
+        department=deposit_department,
+        market=deposit_market,
+        state=deposit_state,
+        division=deposit_division,
+        statement_identifier='8495543',
+        save_location=download_directory,
     )
 
     # THEN imports per company are downloaded to the user
