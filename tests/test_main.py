@@ -3,6 +3,8 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import pandas as pd
+
 from constants import Market, Division, e16, Department
 from main import main
 
@@ -16,8 +18,8 @@ def test_creating_import_happy_case(tmp_path):
     # GIVEN the expected inputs
     statement_amount = Decimal('5896.07')
     client_code = 'P005'
-    deposit_date = date(2024, 2, 17)
-    document_date = date(2024, 1, 31)
+    deposit_date = pd.Timestamp(date(2024, 9, 17))
+    document_date = pd.Timestamp(date(2024, 1, 31))
     deposit_payment_id = '191705'
     deposit_department = Department.retail
     deposit_market = Market.corporate
@@ -27,6 +29,7 @@ def test_creating_import_happy_case(tmp_path):
 
     # Download directory
     download_directory = tmp_path / 'downloads'
+    download_directory.mkdir()
 
     # WHEN calling the function to generate the imports
     main(

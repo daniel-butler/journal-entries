@@ -91,7 +91,7 @@ class JournalLine:
     applies_to_document_number: str | None = None
     applies_to_document_type: DocumentType | None = None
     blank_field: str | None = None
-    credit: Decimal | None = None
+    credit: Decimal = Decimal(0)
     reason_code: str = 'R10'
 
 
@@ -129,10 +129,7 @@ class JournalEntry:
     def validate_lines_net_to_zero(self):
         amount = 0
         for line in self.lines:
-            if line.credit is None:
-                amount += line.debit
-            else:
-                amount += line.debit - line.credit
+            amount += line.debit - line.credit
         if amount == 0:
             return True
         else:
@@ -207,15 +204,29 @@ class ImportEntries:
     _entity_and_amount: dict | None = None
 
     def __attrs_post_init__(self):
+        """This function is ran after the object is created.
+        It first validates the lines are for known entities.
+        Then creates the entry_id and an entity_and_amount metadata dictionary we will use later.
+
+        :return: None
+        """
         self.entry_id = self.create_entry_id()
         self._entity_and_amount = dict()
+        for line in self.lines:
+            if entity := ENTITIES.get(line.get('entity')):
+                line['entity'] = entity
+            else:
+                raise ValueError(f"Unknown Entity: {line.get('entity')}")
+
 
     def to_dataframe(self):
         """Turns the entries into a DataFrame that matches the general journal import V7 specification"""
         lines = list()
         for entry in self.entries:
             for line in entry.lines:
-                lines.append(asdict(line))
+                d = asdict(line)
+                d['entry_entity'] = line.entry_entity.abbreviation
+                lines.append(d)
         df = pd.DataFrame(lines)
         df['posting_date'] = pd.to_datetime(df['posting_date'])
         df['document_date'] = pd.to_datetime(df['document_date'])
@@ -299,13 +310,13 @@ class ImportEntries:
                 posting_date=self.posting_date,
                 document_date=self.document_date,
                 document_no=self.entry_id,
-                debit=Decimal(entities[entity]).quantize(Decimal('1.00')) * -1,
+                debit=Decimal(entities[entity]).quantize(Decimal('1.00')) * -1,  # TODO: explanation of this
                 description=f"{entity} - {self.lines[0]['description']}",
                 department=Department.corporate,
-                market=ENTITIES.get(entity).major_market,
-                state=ENTITIES.get(entity).major_state,
-                division=ENTITIES.get(entity).major_division,
-                business_unit_code=ENTITIES.get(entity).business_unit,
+                market=entity.major_market,
+                state=entity.major_state,
+                division=entity.major_division,
+                business_unit_code=entity.business_unit,
                 document_type=DocumentType.invoice,
                 client=self.deposit_client_code,
                 entry_entity=self.deposit_entity,
@@ -326,7 +337,7 @@ class ImportEntries:
             market=self.deposit_market,
             state=self.deposit_state,
             division=self.deposit_division,
-            business_unit_code=ENTITIES.get(self.deposit_entity).business_unit,
+            business_unit_code=self.deposit_entity.business_unit,
             client=self.deposit_client_code,
             applies_to_document_type=DocumentType.payment,
             applies_to_document_number=self.deposit_id,
@@ -365,7 +376,7 @@ class ImportEntries:
         """Creates revenue lines"""
         description = line['description']
         if entry_entity != self.deposit_entity:
-            description = f'{self.deposit_entity} - ' + description
+            description = f"{self.deposit_entity.abbreviation} - {description}"
 
         return JournalLine(
             account_type=EntryType.general_ledger,
@@ -381,7 +392,7 @@ class ImportEntries:
             state=line['state'],
             division=line['division'],
             document_type=DocumentType.invoice,
-            business_unit_code=ENTITIES.get(line['entity']).business_unit,
+            business_unit_code=line['entity'].business_unit,
             entry_entity=entry_entity
         )
 
@@ -416,7 +427,7 @@ class ImportEntries:
         """
         if not self._entity_and_amount:
             for line in self.lines:
-                if entity := ENTITIES.get(line.get('entity')):
+                if entity := line.get('entity'):
                     self._entity_and_amount[entity] = Decimal(
                         self._entity_and_amount.get(entity, 0) + Decimal(line['amount'])
                     ).quantize(Decimal('1.00'))
@@ -443,5 +454,7 @@ def save_import_jes(
                                                 f"IMPORT_{entries.import_version}_{entity}.txt"
         df[df['entry_entity'] == entity].drop('entry_entity', axis=1) \
             .to_csv(destination, sep='\t', index=False, header=False, date_format='%m%d%y', )
+
+    # TODO: zip the files
     return statement_save_location
 
