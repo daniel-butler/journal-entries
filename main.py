@@ -218,7 +218,6 @@ class ImportEntries:
             else:
                 raise ValueError(f"Unknown Entity: {line.get('entity')}")
 
-
     def to_dataframe(self):
         """Turns the entries into a DataFrame that matches the general journal import V7 specification"""
         lines = list()
@@ -311,7 +310,7 @@ class ImportEntries:
                 document_date=self.document_date,
                 document_no=self.entry_id,
                 debit=Decimal(entities[entity]).quantize(Decimal('1.00')) * -1,  # TODO: explanation of this
-                description=f"{entity} - {self.lines[0]['description']}",
+                description=f"{entity.abbreviation} - {self.lines[0]['description']}",
                 department=Department.corporate,
                 market=entity.major_market,
                 state=entity.major_state,
@@ -353,7 +352,7 @@ class ImportEntries:
         ]
 
         # create description
-        description = f'Created deposit line in {self.deposit_entity}'
+        description = f'Created deposit line in {self.deposit_entity.abbreviation}'
 
         if revenue_lines:
             description += ' with revenue lines'
