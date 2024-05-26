@@ -309,7 +309,9 @@ class ImportEntries:
                 posting_date=self.posting_date,
                 document_date=self.document_date,
                 document_no=self.entry_id,
-                debit=Decimal(entities[entity]).quantize(Decimal('1.00')) * -1,  # TODO: explanation of this
+                # The below entry the balancing entry to the deposit entity.
+                # This is required so that each entity's journal entry nets to zero.
+                debit=Decimal(entities[entity]).quantize(Decimal('1.00')) * -1,
                 description=f"{entity.abbreviation} - {self.lines[0]['description']}",
                 department=Department.corporate,
                 market=entity.major_market,
@@ -443,6 +445,10 @@ def save_import_jes(
     Using the list of entries from the entries attribute. A dataframe of the entries are created. Looking at each
     entities set of entries they are saved off as a .txt file to the specified location.
     """
+    # TODO: Implement support for Quickbooks
+    # TODO: Implement support for SAP
+    # TODO: Implement support for Oracle Fusion
+
     df = entries.to_dataframe()
     statement_save_location = save_location / f'{entries.statement_reference}'
     statement_save_location.mkdir()
