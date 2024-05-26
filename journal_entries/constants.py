@@ -1,4 +1,4 @@
-from attrs import define, field
+from attrs import define
 from enum import StrEnum
 import pandas as pd
 
@@ -205,7 +205,7 @@ ENTITIES: dict[str, Entity] = {
 
 
 INPUT_CONVERSION_MAP = {
-    'V20200224': {
+    'V1': {
         'column_conversion': {
             'account no.': 'account_number', 'posting date': 'posting_date', 'document date': 'document_date',
             'amount': 'amount', 'description': 'description', 'department': 'department', 'market': 'market',
@@ -230,3 +230,11 @@ INPUT_CONVERSION_MAP = {
         }
     }
 }
+
+ALLOWED_INPUT_VERSIONS = list(INPUT_CONVERSION_MAP.keys())
+
+OUTPUT_CONVERSION_MAP = {
+    "V1": "placeholder"
+}
+
+ALLOWED_OUTPUT_VERSIONS = list(OUTPUT_CONVERSION_MAP.keys())

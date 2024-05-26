@@ -1,11 +1,10 @@
 from datetime import date
-from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
 
-from constants import Market, Division, e16, Department
-from main import main
+from journal_entries.constants import Market, Division, e16, Department
+from journal_entries.main import main
 
 test_data_directory = Path(__file__).parent / "data"
 
@@ -15,7 +14,6 @@ def test_creating_import_happy_case(tmp_path):
     test_file = test_data_directory / 'example-statement.xlsx'
 
     # GIVEN the expected inputs
-    statement_amount = Decimal('5896.07')
     client_code = 'P005'
     deposit_date = pd.Timestamp(date(2024, 9, 17))
     document_date = pd.Timestamp(date(2024, 1, 31))
@@ -37,7 +35,7 @@ def test_creating_import_happy_case(tmp_path):
         deposit_entity=deposit_entity,
         posting_date=deposit_date,
         document_date=document_date,
-        payment_number='191705',
+        payment_number=deposit_payment_id,
         applies_to_type='Payment',
         department=deposit_department,
         market=deposit_market,

@@ -9,9 +9,9 @@ import uuid
 
 import pandas as pd
 
-from constants import INTERCOMPANY_GL_ASSET_ACCOUNT, EntryType, DocumentType, \
+from .constants import INTERCOMPANY_GL_ASSET_ACCOUNT, EntryType, DocumentType, \
     INTERCOMPANY_GL_LIABILITY_ACCOUNT, Department, Market, ENTITIES, Entity
-from exceptions import JournalEntryInvalid
+from .exceptions import JournalEntryInvalid
 
 SAVE_LOCATION = Path(__file__).parent  # Same folder as the script
 
