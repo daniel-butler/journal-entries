@@ -10,7 +10,9 @@ import typer
 from typer import Typer
 
 from .main import main, SAVE_LOCATION
-from .constants import Department, Market, ENTITIES, ALLOWED_INPUT_VERSIONS, ALLOWED_OUTPUT_VERSIONS
+from .constants import (
+    Department, Market, ENTITIES, ALLOWED_INPUT_VERSIONS, ALLOWED_OUTPUT_VERSIONS
+)
 app = Typer()
 
 
